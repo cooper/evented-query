@@ -3,6 +3,7 @@ package Evented::Query;
 
 use warnings;
 use strict;
+use feature 'switch';
 
 use EventedObject;
 use parent 'EventedObject';
@@ -11,6 +12,7 @@ use parent 'EventedObject';
 sub new {
     my ($class, %opts) = @_;
     my $query = $class->SUPER::new(%opts);
+    $query->{arguments} = [];
     return $query;
 }
 
@@ -21,6 +23,7 @@ sub new {
 # returns a list of SQL query arguments.
 sub sql_arguments {
     my $query = shift;
+    return @{$query->{arguments}};
 }
 
 # compiles to SQL and stores it.
@@ -84,6 +87,9 @@ sub order_by {
     # default to ascending.
     $format ||= 'ASC';
     
+    $query->{order_by_column} = $column;
+    $query->{order_by_format} = $format;
+    
     return $query;
 }
 
@@ -145,7 +151,19 @@ sub _select_sql {
 }
 
 sub _order_by_sql {
-    return '';
+    my $query = shift;
+    return if !defined $query->{order_by_column};
+    
+    # replace anything with the actual SQL keywords.
+    # this allows you to pass things such as 'ascending'
+    if (lc $query->{order_by_format} =~ m/^a/) {
+        $query->{order_by_format} = 'ASC';
+    }
+    if (lc $query->{order_by_format} =~ m/^d/) {
+        $query->{order_by_format} = 'DESC';
+    }
+    
+    return 'ORDER BY '._bt($query->{order_by_column}).' '.$query->{order_by_format};
 }
 
 sub _limit_sql {
@@ -160,6 +178,10 @@ sub _limit_sql {
 
 sub where {
     my $query = shift;
+    
+    # add these conditionals.
+    $query->{conditionals} ||= [];
+    push @{$query->{conditionals}}, @_;
     
     return $query;
 }
@@ -184,7 +206,50 @@ sub select_num_rows {
 }
 
 sub _where_sql {
-    return '';
+    my $query = shift;
+    return if !$query->{conditionals};
+    
+    # create SQL for each conditional.
+    my ($i, $sql) = (0, '');
+    foreach my $item (@{$query->{conditionals}}) {
+
+        my $string;
+
+        # array ref in the format of [column, compare operator, value]
+        if (ref $item && ref $item eq 'ARRAY') {
+        
+            # create SQL for this item.
+            my ($column, $op, $value) = @$item;
+            $op     = _where_op($op);
+            $string = _bt($column)." $op ?";
+            
+            # add the argument.
+            push @{$query->{arguments}}, $value;
+        
+        }
+
+        # normal strings are injected as-is.
+        else {
+            $string = $item;
+        }
+
+        $sql .= $i == 0 ? 'WHERE ' : ' AND ';
+        $sql .= $string;
+        
+        $i++;
+    }
+    
+    return $sql;
+}
+
+sub _where_op {
+    my $op = shift;
+    given (lc $op) {
+        when (/less|lt/)    { return '<' }
+        when (/greater|gt/) { return '>' }
+        when (/equal|eq/)   { return '=' }
+    }
+    return $op;
 }
 
 ##############
