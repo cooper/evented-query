@@ -57,6 +57,7 @@ sub sql_data {
 
 
 # set query select columns.
+# you can call this several times to add more columns.
 sub select {
     my ($query, @select) = @_;
     
@@ -64,12 +65,22 @@ sub select {
     @select = '*' if scalar @select == 0;
     
     # set the select columns.
-    $query->{select_columns} = \@select;
+    $query->{select_columns} ||= [];
+    push @{$query->{select_columns}}, @select;
     
     # it's a select query.
     $query->{generator} = \&_select_sql;
     
     return $query;
+}
+
+# set a query select column and select it using a different column name.
+sub select_as {
+    my ($query, $select, $as) = @_;
+    
+    # SELECT..AS is stored as an array reference.
+    $query->select([$select, $as]);
+    
 }
 
 # set select target table.
@@ -93,6 +104,10 @@ sub order_by {
     return $query;
 }
 
+# set select grouping column.
+sub group_by {
+}
+
 # set select row return limit.
 sub limit {
     my $query = shift;
@@ -106,25 +121,29 @@ sub _select_fmt {
     
     # backtick each column name.
     foreach my $column (@{$query->{select_columns}}) {
-    
-        # select all.
-        if ($column eq '*') {
-            @final = '*';
-            last;
-        }
+        my ($col, $as);
         
-        # function; do not backtick.
-        if ($column =~ m/\(/) {
-            push @final, $column;
+        # array reference indicates SELECT..AS.
+        if (ref $column && ref $column eq 'ARRAY') {
+
+            $col = $column->[0];
+            $as  = $column->[1];
+        }
+    
+        # backtick things that need them.
+        if ($column !~ m/\(/ && $column ne '*') {
+            $col = _bt($column);
         }
         
         # add backticks.
-        push @final, _bt($column);
+        push @final, $col             unless defined $as;
+        push @final, $col.' AS '._bt($as) if defined $as;
         
     }
 
     # return as a comma-separated string.
     return join ', ', @final;
+    
 }
 
 # creates a select query.
@@ -164,6 +183,10 @@ sub _order_by_sql {
     }
     
     return 'ORDER BY '._bt($query->{order_by_column}).' '.$query->{order_by_format};
+}
+
+sub _group_by_sql {
+
 }
 
 sub _limit_sql {
