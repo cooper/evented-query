@@ -106,6 +106,9 @@ sub order_by {
 
 # set select grouping column.
 sub group_by {
+    my ($query, $column) = @_;
+    $query->{group_by_column} = $column;    
+    return $query;
 }
 
 # set select row return limit.
@@ -130,9 +133,14 @@ sub _select_fmt {
             $as  = $column->[1];
         }
     
+        # if it's not an array ref, it's just a SELECT.
+        else {
+            $col = $column;
+        }
+    
         # backtick things that need them.
-        if ($column !~ m/\(/ && $column ne '*') {
-            $col = _bt($column);
+        if ($col !~ m/\(/ && $col ne '*') {
+            $col = _bt($col);
         }
         
         # add backticks.
@@ -160,9 +168,10 @@ sub _select_sql {
     my $where = _space($query->_where_sql);
     my $order = _space($query->_order_by_sql);
     my $limit = _space($query->_limit_sql);
+    my $group = _space($query->_group_by_sql);
 
     # create query.
-    my $sql = "SELECT $items FROM $table$where$order$limit";
+    my $sql = "SELECT $items FROM $table$where$order$group$limit";
     
     # return complete query.
     return $sql;
@@ -186,7 +195,9 @@ sub _order_by_sql {
 }
 
 sub _group_by_sql {
-
+    my $query = shift;
+    return if !defined $query->{group_by_column};
+    'GROUP BY '._bt($query->{group_by_column});
 }
 
 sub _limit_sql {

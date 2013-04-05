@@ -47,12 +47,12 @@ test('Select with equal clause and inequality clause', sub {
     );
 });
 
-test('Select with clauses, function, alt. names, limit, order by', sub {
+test('Select with clauses, function, alt. names, limit, order, group', sub {
     shift->select('col1', 'col2', ['col3', 'id'], ['SUM(`col`)', 'sum'])
     ->from('someTable')->where(
         ['col', 'is equal to',  'some value'],
         ['col', 'is less than', 56]
-    )->order_by('col1')->limit(100);
+    )->order_by('col1')->group_by('col2')->limit(100);
 });
 
 sub test {
